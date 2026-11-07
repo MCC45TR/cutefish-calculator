@@ -5,6 +5,9 @@
 
 #include <gtest/gtest.h>
 
+#include <initializer_list>
+#include <string_view>
+
 TEST(CalculatorTest, ResultsAndHistory)
 {
     Calculator calculator;
@@ -32,67 +35,113 @@ TEST(CalculatorTest, GoesOnFromTheFullResult)
     // The result typed again by hand elsewhere in the expression is taken as typed.
     EXPECT_EQ(calculator.calculate("1÷3"), "0.3333333333");
     EXPECT_EQ(calculator.calculate("3×0.3333333333"), "0.9999999999");
-    EXPECT_EQ(calculator.calculate("2^0.5"), "1.4142135624");
-    EXPECT_EQ(calculator.calculate("1.4142135624^2"), "2");
-}
-
-TEST(CalculatorTest, Insert)
-{
-    Calculator::Edit edit = Calculator::insert("12", 2, 2, "+");
-    EXPECT_EQ(edit.text, "12+");
-    EXPECT_EQ(edit.cursor, 3u);
-    edit = Calculator::insert("12", 1, 1, "×");
-    EXPECT_EQ(edit.text, "1×2");
-    EXPECT_EQ(edit.cursor, 3u);
-    // A selection is replaced, whichever end the cursor is at.
-    edit = Calculator::insert("1234", 1, 3, "9");
-    EXPECT_EQ(edit.text, "194");
-    EXPECT_EQ(edit.cursor, 2u);
-    edit = Calculator::insert("1234", 3, 1, "9");
-    EXPECT_EQ(edit.text, "194");
-    edit = Calculator::insert("12", 9, 9, "3");
-    EXPECT_EQ(edit.text, "123");
+    // Percent goes on from the full value too.
+    EXPECT_EQ(calculator.calculate("2÷3"), "0.6666666667");
+    EXPECT_EQ(calculator.calculate("0.6666666667×150%"), "1");
 }
 
 TEST(CalculatorTest, Backspace)
 {
-    Calculator::Edit edit = Calculator::backspace("123", 3, 3);
-    EXPECT_EQ(edit.text, "12");
-    EXPECT_EQ(edit.cursor, 2u);
-    edit = Calculator::backspace("123", 1, 1);
-    EXPECT_EQ(edit.text, "23");
-    EXPECT_EQ(edit.cursor, 0u);
-    edit = Calculator::backspace("123", 0, 0);
-    EXPECT_EQ(edit.text, "123");
-    EXPECT_EQ(edit.cursor, 0u);
+    EXPECT_EQ(Calculator::backspace("123"), "12");
+    EXPECT_EQ(Calculator::backspace("1"), "");
+    EXPECT_EQ(Calculator::backspace(""), "");
     // A character of several bytes goes whole.
-    edit = Calculator::backspace("6×", 3, 3);
-    EXPECT_EQ(edit.text, "6");
-    EXPECT_EQ(edit.cursor, 1u);
-    edit = Calculator::backspace("1234", 3, 1);
-    EXPECT_EQ(edit.text, "14");
-    EXPECT_EQ(edit.cursor, 1u);
+    EXPECT_EQ(Calculator::backspace("6×"), "6");
+    EXPECT_EQ(Calculator::backspace("6÷2"), "6÷");
 }
 
-TEST(CalculatorTest, Parenthesis)
+// The expression after pressing each key of the sequence, from empty.
+static std::string typed(std::initializer_list<std::string_view> keys)
 {
-    const auto at = [](const std::string& text) { return Calculator::parenthesis(text, text.size()); };
-    EXPECT_EQ(at(""), "(");
-    EXPECT_EQ(at("2"), "(");
-    EXPECT_EQ(at("(2"), ")");
-    EXPECT_EQ(at("(2+"), "(");
-    EXPECT_EQ(at("(2)"), "(");
-    EXPECT_EQ(at("((2)"), ")");
-    EXPECT_EQ(at("(sin"), "(");
-    EXPECT_EQ(at("(pi"), ")");
-    EXPECT_EQ(at("(2e"), ")");
-    EXPECT_EQ(at("(x"), ")");
-    EXPECT_EQ(at("(2."), ")");
-    EXPECT_EQ(at("(5%"), ")");
-    EXPECT_EQ(at("(3!"), ")");
-    EXPECT_EQ(at("(2π"), ")");
-    EXPECT_EQ(at("(2×"), "(");
-    EXPECT_EQ(at("(2 "), ")");
-    EXPECT_EQ(Calculator::parenthesis("(2)", 2), ")");
-    EXPECT_EQ(Calculator::parenthesis("(2)", 0), "(");
+    Calculator calculator;
+    for (const std::string_view key : keys)
+        calculator.press(key);
+    return calculator.expression();
+}
+
+TEST(CalculatorTest, Operators)
+{
+    // An operator first follows a 0.
+    EXPECT_EQ(typed({"+"}), "0+");
+    EXPECT_EQ(typed({"−", "5"}), "0−5");
+    EXPECT_EQ(typed({"×"}), "0×");
+    // Another operator replaces it.
+    EXPECT_EQ(typed({"7", "+", "×"}), "7×");
+    EXPECT_EQ(typed({"7", "×", "−", "÷"}), "7÷");
+    // A point before it goes.
+    EXPECT_EQ(typed({"5", ".", "+"}), "5+");
+    EXPECT_EQ(typed({"5", "%", "+", "2"}), "5%+2");
+}
+
+TEST(CalculatorTest, Numbers)
+{
+    // A lone 0 gives way to the digit; more zeros do nothing.
+    EXPECT_EQ(typed({"0", "7"}), "7");
+    EXPECT_EQ(typed({"0", "0", "0"}), "0");
+    EXPECT_EQ(typed({"1", "+", "0", "5"}), "1+5");
+    EXPECT_EQ(typed({"1", "0", "0"}), "100");
+    // 00 is a single 0 where a number starts.
+    EXPECT_EQ(typed({"00"}), "0");
+    EXPECT_EQ(typed({"00", "00"}), "0");
+    EXPECT_EQ(typed({"1", "+", "00"}), "1+0");
+    EXPECT_EQ(typed({"3", "00"}), "300");
+    EXPECT_EQ(typed({"0", ".", "00"}), "0.00");
+    // One point to a number, after a 0 where it starts.
+    EXPECT_EQ(typed({"."}), "0.");
+    EXPECT_EQ(typed({"1", "+", "."}), "1+0.");
+    EXPECT_EQ(typed({"1", ".", "5", "."}), "1.5");
+    EXPECT_EQ(typed({"1", ".", "5", "+", "2", "."}), "1.5+2.");
+    EXPECT_EQ(typed({"0", ".", "0", "5"}), "0.05");
+    // Nothing after a %.
+    EXPECT_EQ(typed({"5", "%", "3"}), "5%");
+    EXPECT_EQ(typed({"5", "%", "."}), "5%");
+}
+
+TEST(CalculatorTest, PercentKey)
+{
+    EXPECT_EQ(typed({"%"}), "");
+    EXPECT_EQ(typed({"5", "+", "%"}), "5+");
+    EXPECT_EQ(typed({"5", "%", "%"}), "5%");
+    EXPECT_EQ(typed({"5", ".", "%"}), "5%");
+}
+
+TEST(CalculatorTest, EqualsAndResults)
+{
+    Calculator calculator;
+    for (const std::string_view key : {"=", "7", "+", "="})
+        calculator.press(key);
+    // Nothing to work out yet.
+    EXPECT_EQ(calculator.expression(), "7+");
+    EXPECT_TRUE(calculator.history().empty());
+    for (const std::string_view key : {"8", "="})
+        calculator.press(key);
+    EXPECT_EQ(calculator.expression(), "15");
+    // An operator goes on from the result, a digit starts again.
+    calculator.press("×");
+    EXPECT_EQ(calculator.expression(), "15×");
+    for (const std::string_view key : {"2", "="})
+        calculator.press(key);
+    EXPECT_EQ(calculator.expression(), "30");
+    calculator.press("4");
+    EXPECT_EQ(calculator.expression(), "4");
+    for (const std::string_view key : {"=", "."})
+        calculator.press(key);
+    EXPECT_EQ(calculator.expression(), "0.");
+    EXPECT_EQ(calculator.history(), (std::vector<std::string>{"7+8 = 15", "15×2 = 30"}));
+    // A result taken back by backspace is a number to type on.
+    for (const std::string_view key : std::initializer_list<std::string_view>{Calculator::Clear, "9", "×", "9", "=", Calculator::Backspace, "1"})
+        calculator.press(key);
+    EXPECT_EQ(calculator.expression(), "81");
+}
+
+TEST(CalculatorTest, ClearKey)
+{
+    Calculator calculator;
+    for (const std::string_view key : {"1", "+", "2", "=", "3"})
+        calculator.press(key);
+    calculator.press(Calculator::Clear);
+    EXPECT_EQ(calculator.expression(), "");
+    EXPECT_EQ(calculator.history().size(), 1u);
+    calculator.press(Calculator::Clear);
+    EXPECT_TRUE(calculator.history().empty());
 }

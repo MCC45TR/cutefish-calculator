@@ -12,14 +12,28 @@
 enum class CalculatorColor : uint16_t {
     // Translucent over the window's blur.
     WindowBackground = uint16_t(cutefish::ui::ColorId::ApplicationFirst),
-    KeypadBackground,
+    // The digit keys.
     Key,
+    // The edge lit at the top and the bottom of a key.
+    KeyRim,
     KeyHovered,
     KeyPressed,
+    // AC, %, backspace and the operators.
+    OperatorKey,
+    OperatorKeyRim,
+    OperatorKeyHovered,
+    OperatorKeyPressed,
     // The = key.
     AccentKey,
+    AccentKeyRim,
     AccentKeyHovered,
     AccentKeyPressed,
+    // The = key while the window is inactive.
+    InactiveAccentKey,
+    InactiveAccentKeyRim,
+    KeyShadow,
+    // The glow under the = key.
+    AccentKeyShadow,
 };
 
 void addCalculatorColors(cutefish::ui::ColorMixer& mixer, const cutefish::ui::Theme& theme);

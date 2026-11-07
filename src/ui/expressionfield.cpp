@@ -4,45 +4,42 @@
 #include "expressionfield.h"
 
 #include "ui/label.h"
-#include "ui/text_field.h"
 #include "ui/theme.h"
 
 #include <algorithm>
-#include <cmath>
 
 using namespace cutefish::ui;
 
 ExpressionField::ExpressionField()
-    : m_field(addChild<TextField>())
-    , m_measure(addChild<Label>())
+    : m_clip(addChild<View>())
+    , m_label(m_clip->addChild<Label>())
 {
     setName("expressionRow");
-    m_field->setName("expression");
-    m_field->setFrameVisible(false);
-    m_field->setFontSize(FontSize);
-    m_field->onTextChanged = [this] {
-        m_measure->setText(m_field->text());
-        requestLayout();
-    };
-    m_measure->setFontSize(FontSize);
-    m_measure->setVisible(false);
+    m_clip->setClipsChildren(true);
+    m_label->setName("expression");
+    m_label->setFontSize(FontSize);
+    m_label->setTextAlignment(Label::TextAlignment::Right);
+    m_label->setVerticallyCentered(true);
+}
+
+const std::string& ExpressionField::text() const
+{
+    return m_label->text();
+}
+
+void ExpressionField::setText(const std::string& text)
+{
+    m_label->setText(text);
+    requestLayout();
 }
 
 void ExpressionField::layout()
 {
+    // The label ends at the right margin and grows past the left one, its
+    // text right-aligned, so the end of the text never moves.
     const double margin = Theme::current().largeSpacing;
-    m_field->setTextMargins(margin, margin);
-    const double width = geometry().width;
-    // The text, the margins and room for the caret after the text.
-    const double text = m_field->text().empty() ? 0 : m_measure->sizeHint().width;
-    const double fieldWidth = std::min(width, std::ceil(text + 2 * margin + 1));
-    m_field->setGeometry({width - fieldWidth, 0, fieldWidth, geometry().height});
-}
-
-void ExpressionField::pointerPress(const PointerEvent& event)
-{
-    if (event.button != MouseButton::Left)
-        return;
-    m_field->setFocus(FocusReason::Mouse);
-    m_field->setCursorPosition(0);
+    const double available = std::max(0.0, geometry().width - 2 * margin);
+    const double width = std::max(available, m_label->sizeHint().width);
+    m_clip->setGeometry({margin, 0, available, geometry().height});
+    m_label->setGeometry({available - width, 0, width, geometry().height});
 }
